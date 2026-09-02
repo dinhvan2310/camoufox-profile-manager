@@ -26,6 +26,7 @@ from camoufox_pm.api.models.profiles import (
     ClearGeographyResponse,
     ProfileCloneRequest,
     ProfileCreateRequest,
+    ProfileListItemResponse,
     ProfileLaunchRequest,
     ProfileLaunchResponse,
     ProfileListResponse,
@@ -103,7 +104,13 @@ async def list_profiles(
         # Convert to API models
         profile_responses = []
         for profile in paginated_profiles:
-            profile_responses.append(ProfileResponse.from_profile(profile))
+            response = ProfileListItemResponse(
+                **ProfileResponse.from_profile(profile).model_dump(),
+                profile_path=str(
+                    Path(profile.get_storage_path(str(profile_manager.profiles_dir))).resolve()
+                ),
+            )
+            profile_responses.append(response)
 
         return ProfileListResponse(
             profiles=profile_responses,

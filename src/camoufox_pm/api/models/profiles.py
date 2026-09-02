@@ -184,10 +184,19 @@ class ProfileResponse(BaseModel):
         )
 
 
+class ProfileListItemResponse(ProfileResponse):
+    """Profile data returned specifically by the list endpoint."""
+
+    profile_path: str = Field(
+        ...,
+        description="Absolute path to the profile's persistent browser data directory.",
+    )
+
+
 class ProfileListResponse(BaseModel):
     """Paginated list of profiles."""
 
-    profiles: list[ProfileResponse]
+    profiles: list[ProfileListItemResponse]
     total: int
     page: int
     per_page: int

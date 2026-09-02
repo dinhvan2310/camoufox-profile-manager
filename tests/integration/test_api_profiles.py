@@ -1,6 +1,7 @@
 """Integration tests for the profiles API."""
 
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -30,6 +31,18 @@ async def test_list_profiles_paginated(client):
     assert body["total"] == 3
     assert len(body["profiles"]) == 2
     assert body["has_next"] is True
+
+
+@pytest.mark.asyncio
+async def test_list_profiles_includes_absolute_profile_path(client):
+    created = await client.post("/api/profiles", json={"name": "profile-path"})
+    profile_id = created.json()["id"]
+
+    listed = await client.get("/api/profiles")
+    profile = next(item for item in listed.json()["profiles"] if item["id"] == profile_id)
+
+    assert Path(profile["profile_path"]).is_absolute()
+    assert Path(profile["profile_path"]).name == f"profile_{profile_id}"
 
 
 @pytest.mark.asyncio
