@@ -5,6 +5,11 @@ Track progress in [GitHub Issues](https://github.com/polyackiy/camoufox-profile-
 
 ## Since 0.2.0
 
+- The browser tests assert what a *page* sees, not what automation sees. Three
+  timezone assertions read through `page.evaluate`, which since Camoufox
+  152.0.4-beta.29 runs in an isolated world with a realm of its own — so they
+  reported the host's zone while real pages were correctly spoofed. Verified
+  green on beta.28, beta.29 and beta.30.
 - Proxy health is visible in the profiles list: a check leaves its answer in the
   row — exit address, country, latency, and a green, amber or red dot — and a
   selection can be checked in one go. On demand only; nothing polls.
@@ -126,14 +131,20 @@ a real machine looks like, and what the randomisation existed to prevent. Covere
 by browser tests that assert the stability, the drift when it is off, and the
 cross-site linkability it costs.
 
-**Also worth doing: report the upstream bug.** `canvas:seed` is advertised in
-Camoufox's property manifest and emitted by its Python layer, but its C++ config
-reader never reads it and no patch implements it; `window.setCanvasSeed()` is
-documented but absent from the shipped build. A working seed would be better than
-the pref, because it would give each profile its own canvas value instead of one
-shared true render. This does not need a fork — a fork would mean building and
-hosting Firefox for every platform and rebasing on every Camoufox release, for
-one seed value.
+**Reported upstream, still open:
+[daijro/camoufox#721](https://github.com/daijro/camoufox/issues/721).** `canvas:seed`
+is advertised in Camoufox's property manifest and emitted by its Python layer, but
+its C++ config reader never reads it and no patch implements it;
+`window.setCanvasSeed()` is documented but absent from the shipped build. A working
+seed would be better than the pref, because it would give each profile its own
+canvas value instead of one shared true render.
+
+Checked again on 2026-08-20: no answer and no change — `MaskConfig.hpp` at
+upstream `HEAD` still does not mention canvas at all. Not a stalled project, just
+a busy one; there are 57 commits between `beta.28` and `beta.29`. Nothing to do
+but keep the pref and re-check on each release. A fork is not the answer — it
+would mean building and hosting Firefox for every platform and rebasing on every
+Camoufox release, for one seed value.
 
 See [profile-settings.md](profile-settings.md#known-limitations) for the measured
 behaviour and the trade-off table.
