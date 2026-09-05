@@ -19,7 +19,7 @@ from camoufox_pm.api.dependencies import (
 from camoufox_pm.api.errors import install_error_handlers
 from camoufox_pm.api.middleware.logging import LoggingMiddleware
 from camoufox_pm.api.models.system import ErrorResponse, HealthResponse
-from camoufox_pm.api.routes import auth, groups, profiles, schedules, system
+from camoufox_pm.api.routes import automation, auth, groups, profiles, schedules, system
 from camoufox_pm.config import get_settings
 from camoufox_pm.core.database import StorageManager
 from camoufox_pm.core.profile_manager import ProfileManager
@@ -105,6 +105,13 @@ for _prefix, _in_schema in (("/api/v1", True), ("/api", False)):
         profiles.router,
         prefix=_prefix,
         tags=["Profiles"],
+        dependencies=protected,
+        include_in_schema=_in_schema,
+    )
+    app.include_router(
+        automation.router,
+        prefix=_prefix,
+        tags=["Automation"],
         dependencies=protected,
         include_in_schema=_in_schema,
     )
