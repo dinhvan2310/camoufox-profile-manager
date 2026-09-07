@@ -4,6 +4,8 @@ import time
 from pathlib import Path
 
 import psutil
+import tempfile
+
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 
@@ -16,6 +18,8 @@ from camoufox_pm.api.models.system import (
     ProfileCleanupResponse,
     ProfileDiagnosticResponse,
     SystemConfigData,
+    ProfileRootRequest,
+    ProfileRootResult,
     SystemInfoData,
     SystemStatusResponse,
 )
@@ -214,6 +218,7 @@ async def get_system_config():
             host=settings.host,
             port=settings.port,
             database_path=str(Path(settings.db_path).resolve()),
+            profile_root=str(get_profile_manager().profiles_dir.resolve()),
             api_key_set=bool(settings.api_key),
             user_auth_enabled=await get_storage_manager().count_users() > 0,
             encryption_enabled=bool(settings.secret_key),
@@ -221,6 +226,63 @@ async def get_system_config():
             camoufox_available=CAMOUFOX_AVAILABLE,
             uptime_seconds=int(time.time() - startup_time),
         ),
+    )
+
+
+@router.post(
+    "/system/profile-root",
+    response_model=ApiResponse[ProfileRootResult],
+    operation_id="set_profile_root",
+    summary="Set the profile root directory.",
+)
+async def set_profile_root(request: ProfileRootRequest):
+    """Validate and switch the root used for profiles created from now on."""
+    manager = get_profile_manager()
+    root = Path(request.path).expanduser()
+    if not root.exists() or not root.is_dir():
+        raise HTTPException(status_code=400, detail="Profile root must be an existing directory")
+    try:
+        root = root.resolve(strict=True)
+        # Actually exercise write permission without leaving a file behind.
+        with tempfile.NamedTemporaryFile(prefix=".cpm-write-test-", dir=root, delete=True):
+            pass
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Profile root is not writable: {exc}") from exc
+
+    profiles = await manager.storage.list_profiles()
+    known_ids = {profile.id for profile in profiles}
+    matching = sorted(
+        directory.name.removeprefix("profile_")
+        for directory in root.iterdir()
+        if directory.is_dir()
+        and directory.name.startswith("profile_")
+        and directory.name.removeprefix("profile_") in known_ids
+    )
+
+    action = request.action or "preview"
+    if action not in {"preview", "import", "ignore", "cancel"}:
+        raise HTTPException(status_code=400, detail="Unknown profile root action")
+    if action == "preview" and matching:
+        return ApiResponse(
+            success=True,
+            message="Existing profile directories found",
+            data=ProfileRootResult(
+                profile_root=str(root),
+                requires_confirmation=True,
+                matching_directories=matching,
+            ),
+        )
+    if action == "cancel":
+        return ApiResponse(success=True, message="Profile root unchanged", data=ProfileRootResult(
+            profile_root=str(manager.profiles_dir.resolve()),
+        ))
+
+    imported = len(matching) if action == "import" else 0
+    await manager.set_profile_root(root, set(matching) if action == "import" else None)
+    return ApiResponse(
+        success=True,
+        message="Profile root updated",
+        data=ProfileRootResult(profile_root=str(root), imported=imported),
     )
 
 

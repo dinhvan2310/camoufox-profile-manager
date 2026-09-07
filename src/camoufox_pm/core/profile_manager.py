@@ -39,7 +39,33 @@ class ProfileManager:
     async def initialize(self):
         """Initialize the profile manager and its database."""
         await self.storage.initialize()
+        configured_root = await self.storage.get_setting("profile_root")
+        if configured_root:
+            self.profiles_dir = Path(configured_root)
+        else:
+            self.profiles_dir = self.data_dir / "profiles"
+        self.profiles_dir.mkdir(parents=True, exist_ok=True)
+
+        # Older records used paths relative to the process working directory.
+        # Freeze them as absolute paths so changing the root never repoints old
+        # profiles accidentally.
+        for profile in await self.storage.list_profiles():
+            if profile.storage_path and not Path(profile.storage_path).is_absolute():
+                profile.storage_path = str(Path(profile.storage_path).resolve())
+                await self.storage.update_profile(profile)
         logger.info("ProfileManager initialized")
+
+    async def set_profile_root(self, path: str, import_ids: set[str] | None = None) -> None:
+        """Switch the root for newly-created profiles, optionally relinking IDs."""
+        root = Path(path).resolve()
+        self.profiles_dir = root
+        await self.storage.set_setting("profile_root", str(root))
+        if import_ids:
+            for profile_id in import_ids:
+                profile = await self.storage.get_profile(profile_id)
+                if profile:
+                    profile.storage_path = str(root / f"profile_{profile.id}")
+                    await self.storage.update_profile(profile)
 
     async def create_profile(
         self,

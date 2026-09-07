@@ -445,6 +445,7 @@ export interface SystemConfig {
   host: string
   port: number
   database_path: string
+  profile_root: string
   api_key_set: boolean
   user_auth_enabled: boolean
   encryption_enabled: boolean
@@ -508,6 +509,22 @@ export const systemAPI = {
     const body = await request<{ data: SystemConfig }>(`${API_PREFIX}/system/config`)
     return body.data
   },
+
+  async setProfileRoot(path: string, action?: 'preview' | 'import' | 'ignore' | 'cancel') {
+    const body = await request<{ data: ProfileRootResult }>(`${API_PREFIX}/system/profile-root`, {
+      method: 'POST',
+      body: JSON.stringify({ path, action }),
+    })
+    return body.data
+  },
+}
+
+export interface ProfileRootResult {
+  profile_root: string
+  requires_confirmation: boolean
+  matching_directories: string[]
+  imported: number
+  message: string
 }
 
 // --- Display helpers ---------------------------------------------------------

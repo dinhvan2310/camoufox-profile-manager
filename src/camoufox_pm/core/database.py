@@ -178,6 +178,15 @@ class DatabaseManager:
             )
         """)
 
+        # Instance settings that must survive restarts but are not environment
+        # configuration (for example the profile root directory).
+        self._connection.execute("""
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+
         self._connection.commit()
 
     async def _create_indexes(self):
@@ -695,6 +704,22 @@ class DatabaseManager:
             self._connection: sqlite3.Connection = None  # type: ignore[assignment]
         logger.info("Database connection closed")
 
+    async def get_setting(self, key: str) -> str | None:
+        """Read a persisted instance setting."""
+        row = self._connection.execute(
+            "SELECT value FROM app_settings WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else None
+
+    async def set_setting(self, key: str, value: str) -> None:
+        """Persist a setting atomically."""
+        self._connection.execute(
+            """INSERT INTO app_settings(key, value) VALUES(?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
+            (key, value),
+        )
+        self._connection.commit()
+
 
 class StorageManager:
     """StorageManager backed by the SQLite database."""
@@ -706,6 +731,12 @@ class StorageManager:
     async def initialize(self):
         """Initialize the database."""
         await self.db.initialize()
+
+    async def get_setting(self, key: str) -> str | None:
+        return await self.db.get_setting(key)
+
+    async def set_setting(self, key: str, value: str) -> None:
+        await self.db.set_setting(key, value)
 
     # Profile methods
     async def save_profile(self, profile: Profile):

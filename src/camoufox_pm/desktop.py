@@ -12,6 +12,21 @@ import time
 import uvicorn
 
 
+class _DesktopApi:
+    """Small native bridge exposed only by the desktop webview."""
+
+    def choose_profile_root(self) -> str:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            return filedialog.askdirectory(title="Choose profile root directory", mustexist=True) or ""
+        finally:
+            root.destroy()
+
+
 def _wait_until_serving(host: str, port: int, timeout: float = 30.0) -> bool:
     """Block until the server accepts connections, or the timeout elapses."""
     deadline = time.time() + timeout
@@ -49,7 +64,9 @@ def run_desktop(
         raise SystemExit(f"Server did not start on {host}:{port}")
 
     ui_host = "localhost" if host in ("0.0.0.0", "127.0.0.1") else host
-    webview.create_window(title, f"http://{ui_host}:{port}/", width=1280, height=800)
+    webview.create_window(
+        title, f"http://{ui_host}:{port}/", width=1280, height=800, js_api=_DesktopApi()
+    )
     webview.start()
 
     # The window was closed — stop the server and exit.

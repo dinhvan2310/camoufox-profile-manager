@@ -87,6 +87,7 @@ class SystemConfigData(BaseModel):
     host: str
     port: int
     database_path: str
+    profile_root: str
     api_key_set: bool
     # Whether any user account exists, i.e. whether the API requires a login
     # session (or the API key) rather than being open.
@@ -95,6 +96,19 @@ class SystemConfigData(BaseModel):
     cors_origins: list[str]
     camoufox_available: bool
     uptime_seconds: int
+
+
+class ProfileRootRequest(BaseModel):
+    path: str = Field(..., min_length=1)
+    action: str | None = Field(None, description="preview, import, ignore, or cancel")
+
+
+class ProfileRootResult(BaseModel):
+    profile_root: str
+    requires_confirmation: bool = False
+    matching_directories: list[str] = Field(default_factory=list)
+    imported: int = 0
+    message: str = ""
 
 
 class DevicePreset(BaseModel):

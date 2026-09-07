@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Check, Minus, Settings as SettingsIcon, TriangleAlert } from 'lucide-react'
+import { Check, FolderOpen, Minus, Settings as SettingsIcon, TriangleAlert } from 'lucide-react'
 
 import { EmptyState } from '@/components/empty-state'
 import { useToast } from '@/components/toast'
@@ -12,6 +12,7 @@ import {
   type SystemConfig,
   type SystemStatus,
 } from '@/lib/api'
+import { Modal } from '@/components/modal'
 
 function formatUptime(seconds: number): string {
   if (seconds < 60) return `${seconds}s`
@@ -25,6 +26,11 @@ export default function SettingsPage() {
   const [status, setStatus] = useState<SystemStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [key, setKey] = useState('')
+  const [profileRoot, setProfileRoot] = useState('')
+  const [rootBusy, setRootBusy] = useState(false)
+  const [nativePickerAvailable, setNativePickerAvailable] = useState(false)
+  const [rootError, setRootError] = useState<string | null>(null)
+  const [rootWarning, setRootWarning] = useState<Awaited<ReturnType<typeof systemAPI.setProfileRoot>> | null>(null)
   const toast = useToast()
 
   useEffect(() => {
@@ -32,15 +38,24 @@ export default function SettingsPage() {
     // prerendered into the static export, so it can only be read after mount.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setKey(getApiKey())
+    const hasNativePicker = () => Boolean(
+      (window as Window & { pywebview?: { api?: { choose_profile_root?: unknown } } }).pywebview?.api?.choose_profile_root,
+    )
+    setNativePickerAvailable(hasNativePicker())
+    const onPywebviewReady = () => setNativePickerAvailable(hasNativePicker())
+    window.addEventListener('pywebviewready', onPywebviewReady)
     async function load() {
       try {
-        setConfig(await systemAPI.config())
+        const loaded = await systemAPI.config()
+        setConfig(loaded)
+        setProfileRoot(loaded.profile_root)
         setStatus(await systemAPI.status().catch(() => null))
       } catch (err) {
         setError(String(err instanceof Error ? err.message : err))
       }
     }
     load()
+    return () => window.removeEventListener('pywebviewready', onPywebviewReady)
   }, [])
 
   function saveKey(event: React.FormEvent) {
@@ -51,6 +66,36 @@ export default function SettingsPage() {
       key.trim() ? 'API key saved' : 'API key cleared',
       'Stored in this browser only, and sent as X-API-Key.',
     )
+  }
+
+  async function chooseProfileRoot() {
+    const picker = (window as Window & { pywebview?: { api?: { choose_profile_root?: () => Promise<string> } } }).pywebview?.api?.choose_profile_root
+    if (!picker) return
+    const selected = await picker()
+    if (selected) {
+      setProfileRoot(selected)
+      await saveProfileRoot(selected)
+    }
+  }
+
+  async function saveProfileRoot(path: string, action?: 'import' | 'ignore') {
+    setRootBusy(true)
+    setRootError(null)
+    try {
+      const result = await systemAPI.setProfileRoot(path, action)
+      if (result.requires_confirmation) {
+        setRootWarning(result)
+      } else {
+        setProfileRoot(result.profile_root)
+        setConfig((current) => current ? { ...current, profile_root: result.profile_root } : current)
+        setRootWarning(null)
+        toast('ok', 'Profile folder updated', action === 'import' ? `Relinked ${result.imported} profile(s).` : 'New profiles will use this folder.')
+      }
+    } catch (err) {
+      setRootError(String(err instanceof Error ? err.message : err))
+    } finally {
+      setRootBusy(false)
+    }
   }
 
   return (
@@ -143,6 +188,31 @@ export default function SettingsPage() {
             />
           </Group>
 
+          <Group title="Profile storage" note="Existing profiles keep their current locations. This folder applies to new profiles.">
+            <div className="px-4 py-3">
+              <label htmlFor="profile-root" className="mb-1.5 block text-ink-dim">Profile root directory</label>
+              <div className="flex gap-2">
+                <input
+                  id="profile-root"
+                  className="field min-w-0 flex-1 font-mono"
+                  value={profileRoot}
+                  onChange={(event) => setProfileRoot(event.target.value)}
+                  onBlur={() => profileRoot.trim() && saveProfileRoot(profileRoot.trim())}
+                  disabled={rootBusy}
+                  spellCheck={false}
+                />
+                {nativePickerAvailable && (
+                  <button className="btn btn-default shrink-0" onClick={chooseProfileRoot} disabled={rootBusy} title="Choose folder">
+                    <FolderOpen size={14} />
+                    <span>Browse</span>
+                  </button>
+                )}
+              </div>
+              {rootError && <p className="mt-2 text-danger">{rootError}</p>}
+              <p className="mt-2 text-ink-faint">Must already exist and be writable. Profiles are stored directly as <span className="font-mono">profile_&lt;id&gt;</span>.</p>
+            </div>
+          </Group>
+
           {status && (
             <Group title="Usage">
               <Row label="Profiles">
@@ -163,6 +233,32 @@ export default function SettingsPage() {
           )}
         </div>
       )}
+
+      <Modal
+        open={Boolean(rootWarning)}
+        title="Profile folders found"
+        subtitle="Some folders in this directory match profiles in the database."
+        onClose={() => {
+          setRootWarning(null)
+          setProfileRoot(config?.profile_root ?? '')
+        }}
+        width={500}
+        footer={
+          <>
+            <button className="btn btn-default" onClick={() => {
+              setRootWarning(null)
+              setProfileRoot(config?.profile_root ?? '')
+            }}>Cancel</button>
+            <button className="btn btn-default" onClick={() => rootWarning && saveProfileRoot(rootWarning.profile_root, 'ignore')}>Ignore</button>
+            <button className="btn btn-primary" onClick={() => rootWarning && saveProfileRoot(rootWarning.profile_root, 'import')}>Import and relink</button>
+          </>
+        }
+      >
+        <p className="text-ink-dim">Importing updates the matching profiles to use these folders. No files are moved or deleted.</p>
+        <p className="mt-3 max-h-40 overflow-y-auto rounded border border-line bg-canvas px-3 py-2 font-mono text-ink-faint">
+          {rootWarning?.matching_directories.map((id) => `profile_${id}`).join('\n')}
+        </p>
+      </Modal>
     </>
   )
 }
