@@ -1,10 +1,11 @@
 """API routes for system functions."""
 
+import asyncio
+import tempfile
 import time
 from pathlib import Path
 
 import psutil
-import tempfile
 
 from fastapi import APIRouter, HTTPException
 from loguru import logger
@@ -32,6 +33,19 @@ router = APIRouter()
 
 # Application startup time, used to compute uptime.
 startup_time = time.time()
+
+
+def _choose_directory() -> str:
+    """Open the OS folder picker in the local backend process."""
+    import tkinter as tk
+    from tkinter import filedialog
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        return filedialog.askdirectory(title="Choose profile root directory", mustexist=True) or ""
+    finally:
+        root.destroy()
 
 
 def _cleanup_manager() -> ProfileCleanupManager:
@@ -227,6 +241,24 @@ async def get_system_config():
             uptime_seconds=int(time.time() - startup_time),
         ),
     )
+
+
+@router.post(
+    "/system/profile-root/picker",
+    response_model=ApiResponse[str],
+    operation_id="pick_profile_root",
+    summary="Open the local profile root picker.",
+)
+async def pick_profile_root():
+    """Open a native picker when the Web UI is hosted on this machine."""
+    try:
+        selected = await asyncio.to_thread(_choose_directory)
+    except (ImportError, RuntimeError, OSError) as exc:
+        raise HTTPException(
+            status_code=501,
+            detail=f"The local folder picker is unavailable: {exc}",
+        ) from exc
+    return ApiResponse(success=True, message="Folder selected", data=selected)
 
 
 @router.post(

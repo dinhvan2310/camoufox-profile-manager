@@ -517,6 +517,13 @@ export const systemAPI = {
     })
     return body.data
   },
+
+  async pickProfileRoot(): Promise<string> {
+    const body = await request<{ data: string }>(`${API_PREFIX}/system/profile-root/picker`, {
+      method: 'POST',
+    })
+    return body.data
+  },
 }
 
 export interface ProfileRootResult {

@@ -21,6 +21,10 @@ function formatUptime(seconds: number): string {
   return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`
 }
 
+function comparablePath(path: string): string {
+  return path.trim().replaceAll('\\', '/').replace(/\/+$/, '')
+}
+
 export default function SettingsPage() {
   const [config, setConfig] = useState<SystemConfig | null>(null)
   const [status, setStatus] = useState<SystemStatus | null>(null)
@@ -28,7 +32,6 @@ export default function SettingsPage() {
   const [key, setKey] = useState('')
   const [profileRoot, setProfileRoot] = useState('')
   const [rootBusy, setRootBusy] = useState(false)
-  const [nativePickerAvailable, setNativePickerAvailable] = useState(false)
   const [rootError, setRootError] = useState<string | null>(null)
   const [rootWarning, setRootWarning] = useState<Awaited<ReturnType<typeof systemAPI.setProfileRoot>> | null>(null)
   const toast = useToast()
@@ -38,12 +41,6 @@ export default function SettingsPage() {
     // prerendered into the static export, so it can only be read after mount.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setKey(getApiKey())
-    const hasNativePicker = () => Boolean(
-      (window as Window & { pywebview?: { api?: { choose_profile_root?: unknown } } }).pywebview?.api?.choose_profile_root,
-    )
-    setNativePickerAvailable(hasNativePicker())
-    const onPywebviewReady = () => setNativePickerAvailable(hasNativePicker())
-    window.addEventListener('pywebviewready', onPywebviewReady)
     async function load() {
       try {
         const loaded = await systemAPI.config()
@@ -55,7 +52,6 @@ export default function SettingsPage() {
       }
     }
     load()
-    return () => window.removeEventListener('pywebviewready', onPywebviewReady)
   }, [])
 
   function saveKey(event: React.FormEvent) {
@@ -70,19 +66,31 @@ export default function SettingsPage() {
 
   async function chooseProfileRoot() {
     const picker = (window as Window & { pywebview?: { api?: { choose_profile_root?: () => Promise<string> } } }).pywebview?.api?.choose_profile_root
-    if (!picker) return
-    const selected = await picker()
-    if (selected) {
-      setProfileRoot(selected)
-      await saveProfileRoot(selected)
+    try {
+      const selected = picker ? await picker() : await systemAPI.pickProfileRoot()
+      if (selected) {
+        setProfileRoot(selected)
+        await saveProfileRoot(selected)
+      }
+    } catch (err) {
+      setRootError(String(err instanceof Error ? err.message : err))
     }
   }
 
   async function saveProfileRoot(path: string, action?: 'import' | 'ignore') {
+    const nextPath = path.trim()
+    if (!nextPath) return
+    // Blur events are common when moving around Settings. Do not revalidate or
+    // write the database when the user has not actually changed the value.
+    if (!action && config && comparablePath(nextPath) === comparablePath(config.profile_root)) {
+      setProfileRoot(config.profile_root)
+      setRootError(null)
+      return
+    }
     setRootBusy(true)
     setRootError(null)
     try {
-      const result = await systemAPI.setProfileRoot(path, action)
+      const result = await systemAPI.setProfileRoot(nextPath, action)
       if (result.requires_confirmation) {
         setRootWarning(result)
       } else {
@@ -197,16 +205,21 @@ export default function SettingsPage() {
                   className="field min-w-0 flex-1 font-mono"
                   value={profileRoot}
                   onChange={(event) => setProfileRoot(event.target.value)}
-                  onBlur={() => profileRoot.trim() && saveProfileRoot(profileRoot.trim())}
+                  onBlur={() => saveProfileRoot(profileRoot)}
                   disabled={rootBusy}
                   spellCheck={false}
                 />
-                {nativePickerAvailable && (
-                  <button className="btn btn-default shrink-0" onClick={chooseProfileRoot} disabled={rootBusy} title="Choose folder">
-                    <FolderOpen size={14} />
-                    <span>Browse</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="btn btn-default shrink-0"
+                  onClick={chooseProfileRoot}
+                  disabled={rootBusy}
+                  title="Choose folder"
+                  aria-label="Choose profile root directory"
+                >
+                  <FolderOpen size={14} />
+                  <span>Browse</span>
+                </button>
               </div>
               {rootError && <p className="mt-2 text-danger">{rootError}</p>}
               <p className="mt-2 text-ink-faint">Must already exist and be writable. Profiles are stored directly as <span className="font-mono">profile_&lt;id&gt;</span>.</p>

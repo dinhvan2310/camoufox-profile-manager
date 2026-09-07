@@ -14,6 +14,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 - Existing profiles retain their original storage paths when the profile root changes.
 
+## [0.4.3] - 2026-09-07
+
+### Added
+- A local Web UI folder picker for choosing the profile root directory.
+
+### Fixed
+- Profile-root validation now runs only when the value actually changes.
+
 ## [Unreleased]
 
 Nothing yet.
