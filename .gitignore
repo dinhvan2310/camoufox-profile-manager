@@ -267,3 +267,4 @@ src/camoufox_pm/webui/
 
 # Keep the committed PyInstaller spec
 !packaging/*.spec
+!packaging/launch_desktop.py

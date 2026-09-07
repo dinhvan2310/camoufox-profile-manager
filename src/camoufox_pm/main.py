@@ -19,7 +19,7 @@ from camoufox_pm.api.dependencies import (
 from camoufox_pm.api.errors import install_error_handlers
 from camoufox_pm.api.middleware.logging import LoggingMiddleware
 from camoufox_pm.api.models.system import ErrorResponse, HealthResponse
-from camoufox_pm.api.routes import automation, auth, groups, profiles, schedules, system
+from camoufox_pm.api.routes import auth, automation, groups, profiles, schedules, system
 from camoufox_pm.config import get_settings
 from camoufox_pm.core.database import StorageManager
 from camoufox_pm.core.profile_manager import ProfileManager

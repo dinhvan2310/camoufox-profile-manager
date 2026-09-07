@@ -38,6 +38,8 @@ dependencies = [
     "argon2-cffi>=23.1",
     "loguru>=0.7",
     "psutil>=6.1",
+    # Windows does not ship the IANA timezone database used by zoneinfo.
+    "tzdata>=2024.1; sys_platform == 'win32'",
     # socks so a SOCKS5 proxy can be checked, not only HTTP ones.
     "httpx[socks]>=0.28",
 ]
